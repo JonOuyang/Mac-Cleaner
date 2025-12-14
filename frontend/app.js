@@ -253,12 +253,12 @@
     const summary = summaryCards.get(category);
 
     if (entry) {
-        entry.status.classList.remove("pending", "working");
+        entry.status.classList.remove("pending", "working", "done", "error");
         entry.status.classList.add(isError ? "error" : "done");
         entry.status.textContent = isError ? "Error" : "Done";
     }
     if (summary) {
-        summary.badge.classList.remove("pending", "working");
+        summary.badge.classList.remove("pending", "working", "done", "error");
         summary.badge.classList.add(isError ? "error" : "done");
         summary.badge.textContent = isError ? "Error" : "Done";
     }
