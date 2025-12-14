@@ -1,0 +1,258 @@
+:root {
+  color-scheme: light;
+  font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f6f8fb;
+  color: #0f172a;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(circle at 20% 20%, #eef2ff 0, transparent 40%),
+              radial-gradient(circle at 80% 0%, #e0f2fe 0, transparent 35%),
+              #f6f8fb;
+}
+
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px 20px 60px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: center;
+  padding: 20px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #0ea5e9, #2563eb);
+  color: #fff;
+  box-shadow: 0 18px 40px rgba(37, 99, 235, 0.25);
+}
+
+.header h1 {
+  margin: 4px 0;
+  font-size: 26px;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.lede {
+  margin: 8px 0 0;
+  opacity: 0.9;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+button {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+  font-weight: 600;
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+#start-btn {
+  background: #fff;
+  color: #0f172a;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.12);
+}
+
+#start-btn:hover {
+  background: #e2e8f0;
+}
+
+.ghost {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.ghost:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.panel {
+  margin-top: 20px;
+  background: #fff;
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.label {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #475569;
+}
+
+#status-text {
+  margin: 4px 0 0;
+  font-weight: 700;
+}
+
+.endpoint {
+  display: inline-block;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.stream-container {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.placeholder {
+  text-align: center;
+  color: #64748b;
+}
+
+.card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+  border: 1px solid #e2e8f0;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.card h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+
+.note {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+}
+
+.status {
+  font-weight: 700;
+  color: #0ea5e9;
+  font-size: 13px;
+}
+
+.status.done {
+  color: #16a34a;
+}
+
+.status.error {
+  color: #dc2626;
+}
+
+.progress {
+  margin-top: 10px;
+  width: 100%;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 12%;
+  background: linear-gradient(90deg, #0ea5e9, #2563eb);
+  transition: width 0.4s ease;
+}
+
+.progress-fill.indeterminate {
+  position: relative;
+  width: 30%;
+  animation: indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes indeterminate {
+  0% {
+    left: -30%;
+  }
+  50% {
+    left: 40%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+.meta {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #475569;
+}
+
+.meta code {
+  background: #f8fafc;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.output {
+  margin-top: 10px;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 10px;
+  border-radius: 10px;
+  font-family: "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
+  font-size: 13px;
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 720px) {
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .panel-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

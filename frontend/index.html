@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mac Cleaner Scan</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="page">
+    <header class="header">
+      <div>
+        <p class="eyebrow">Live Scanner</p>
+        <h1>macOS Storage Diagnostics</h1>
+        <p class="lede">Stream results as they arrive from the backend and watch each command progress in real time.</p>
+      </div>
+      <div class="actions">
+        <button id="start-btn">Start Stream</button>
+        <button id="mock-btn" class="ghost">Try Mock Data</button>
+      </div>
+    </header>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <p class="label">Connection</p>
+          <p id="status-text">Idle</p>
+        </div>
+        <div>
+          <p class="label">Endpoint</p>
+          <code class="endpoint" id="endpoint-text">/api/scan/stream</code>
+        </div>
+      </div>
+    </section>
+
+    <main id="stream-container" class="stream-container">
+      <p class="placeholder">No data yet. Start the stream to see live updates.</p>
+    </main>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
