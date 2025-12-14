@@ -131,7 +131,13 @@ def _run_command(
         stderr = (exc.stderr or "").strip() or f"Timed out after {timeout} seconds."
         returncode = -1
 
-    parsed_sizes = _parse_du_sizes(stdout) if parse_du else None
+    parsed_sizes = _parse_du_sizes(stdout) if parse_du else []
+
+    # Normalize outputs for frontend/CLI consistency.
+    if returncode == 0 and not stdout:
+        stdout = "No files found."
+    if returncode != 0 and not stderr:
+        stderr = "Command failed without additional details."
 
     return {
         "category": category,
@@ -142,6 +148,7 @@ def _run_command(
         "path": path,
         "note": note,
         "parsed_sizes": parsed_sizes,
+        "status": "ok" if returncode == 0 else "error",
     }
 
 
@@ -159,7 +166,7 @@ def snapshots_search() -> List[CommandResult]:
             note="List local APFS snapshots created by Time Machine.",
         ),
         _run_command(
-            "diskutil apfs listSnapshots / | grep -i size",
+            "diskutil apfs listSnapshots / 2>/dev/null | grep -i size || true",
             category="snapshots",
             path="/",
             note="Estimate snapshot sizes reported by diskutil.",
@@ -188,14 +195,14 @@ def vm_search() -> List[CommandResult]:
     """
     return [
         _run_command(
-            "du -sh /private/var/vm",
+            "test -d /private/var/vm && du -sh /private/var/vm || echo 'No files found.'",
             category="virtual_memory",
             path="/private/var/vm",
             note="Overall size of swap files.",
             parse_du=True,
         ),
         _run_command(
-            "ls -lh /private/var/vm",
+            "ls -lh /private/var/vm 2>/dev/null || echo 'No files found.'",
             category="virtual_memory",
             path="/private/var/vm",
             note="Individual swap files and their sizes.",
@@ -210,7 +217,7 @@ def sleep_search() -> List[CommandResult]:
     """
     return [
         _run_command(
-            "ls -lh /private/var/vm/sleepimage",
+            "ls -lh /private/var/vm/sleepimage 2>/dev/null || echo 'No files found.'",
             category="sleep",
             path="/private/var/vm/sleepimage",
             note="Presence and size of the sleepimage file.",
@@ -225,14 +232,14 @@ def cache_search() -> List[CommandResult]:
     """
     return [
         _run_command(
-            "du -sh ~/Library/Caches",
+            "test -d ~/Library/Caches && du -sh ~/Library/Caches || echo 'No files found.'",
             category="caches",
             path="~/Library/Caches",
             note="User-level caches (Safari, Chrome, apps).",
             parse_du=True,
         ),
         _run_command(
-            "du -sh /Library/Caches",
+            "test -d /Library/Caches && du -sh /Library/Caches || echo 'No files found.'",
             category="caches",
             path="/Library/Caches",
             note="System-level caches.",
@@ -248,28 +255,28 @@ def dev_data_search() -> List[CommandResult]:
     """
     return [
         _run_command(
-            "du -sh ~/Library/Developer",
+            "test -d ~/Library/Developer && du -sh ~/Library/Developer || echo 'No files found.'",
             category="developer_data",
             path="~/Library/Developer",
             note="Aggregate size of all developer data.",
             parse_du=True,
         ),
         _run_command(
-            "du -sh ~/Library/Developer/Xcode/DerivedData",
+            "test -d ~/Library/Developer/Xcode/DerivedData && du -sh ~/Library/Developer/Xcode/DerivedData || echo 'No files found.'",
             category="developer_data",
             path="~/Library/Developer/Xcode/DerivedData",
             note="Xcode build artifacts (DerivedData).",
             parse_du=True,
         ),
         _run_command(
-            "du -sh ~/Library/Developer/CoreSimulator",
+            "test -d ~/Library/Developer/CoreSimulator && du -sh ~/Library/Developer/CoreSimulator || echo 'No files found.'",
             category="developer_data",
             path="~/Library/Developer/CoreSimulator",
             note="Simulator device images and data.",
             parse_du=True,
         ),
         _run_command(
-            "du -sh ~/Library/Developer/Xcode/Archives",
+            "test -d ~/Library/Developer/Xcode/Archives && du -sh ~/Library/Developer/Xcode/Archives || echo 'No files found.'",
             category="developer_data",
             path="~/Library/Developer/Xcode/Archives",
             note="Archived Xcode builds.",
@@ -285,19 +292,19 @@ def homebrew_search() -> List[CommandResult]:
     """
     return [
         _run_command(
-            "brew cleanup -n",
+            "command -v brew >/dev/null 2>&1 && brew cleanup -n || echo 'brew not installed.'",
             category="homebrew",
             note="Preview of files Homebrew can delete (no changes made).",
         ),
         _run_command(
-            "du -sh /opt/homebrew/Cellar /usr/local/Cellar 2>/dev/null",
+            "du -sh /opt/homebrew/Cellar /usr/local/Cellar 2>/dev/null || echo 'No files found.'",
             category="homebrew",
             path="/opt/homebrew/Cellar",
             note="Installed formulae (Cellar) footprint.",
             parse_du=True,
         ),
         _run_command(
-            "du -sh ~/Library/Caches/Homebrew",
+            "test -d ~/Library/Caches/Homebrew && du -sh ~/Library/Caches/Homebrew || echo 'No files found.'",
             category="homebrew",
             path="~/Library/Caches/Homebrew",
             note="Homebrew download/cache storage.",
@@ -313,21 +320,21 @@ def venv_search() -> List[CommandResult]:
     """
     return [
         _run_command(
-            "du -sh ~/.npm",
+            "test -d ~/.npm && du -sh ~/.npm || echo 'No files found.'",
             category="package_artifacts",
             path="~/.npm",
             note="npm cache footprint.",
             parse_du=True,
         ),
         _run_command(
-            "du -sh ~/.cache/pip",
+            "test -d ~/.cache/pip && du -sh ~/.cache/pip || echo 'No files found.'",
             category="package_artifacts",
             path="~/.cache/pip",
             note="pip cache footprint.",
             parse_du=True,
         ),
         _run_command(
-            "du -sh ~/miniconda* ~/anaconda* 2>/dev/null",
+            "du -sh ~/miniconda* ~/anaconda* 2>/dev/null || echo 'No files found.'",
             category="package_artifacts",
             path="~/miniconda* ~/anaconda*",
             note="Conda/Anaconda installations if present.",
@@ -349,12 +356,12 @@ def docker_search() -> List[CommandResult]:
     """
     return [
         _run_command(
-            "docker system df",
+            "command -v docker >/dev/null 2>&1 && docker system df || echo 'docker not installed.'",
             category="docker",
             note="Docker image/container/volume usage summary.",
         ),
         _run_command(
-            "du -sh ~/Library/Containers/com.docker.docker",
+            "du -sh ~/Library/Containers/com.docker.docker 2>/dev/null || echo 'No files found.'",
             category="docker",
             path="~/Library/Containers/com.docker.docker",
             note="Docker for Mac data directory size.",
@@ -370,7 +377,7 @@ def backup_search() -> List[CommandResult]:
     """
     return [
         _run_command(
-            "du -sh ~/Library/Application\\ Support/MobileSync",
+            "test -d ~/Library/Application\\ Support/MobileSync && du -sh ~/Library/Application\\ Support/MobileSync || echo 'No files found.'",
             category="backups",
             path="~/Library/Application Support/MobileSync",
             note="Finder/iTunes device backups.",
@@ -386,7 +393,7 @@ def photo_cache_serch() -> List[CommandResult]:
     """
     return [
         _run_command(
-            "du -sh ~/Pictures/Photos\\ Library.photoslibrary",
+            "test -d ~/Pictures/Photos\\ Library.photoslibrary && du -sh ~/Pictures/Photos\\ Library.photoslibrary || echo 'No files found.'",
             category="photos",
             path="~/Pictures/Photos Library.photoslibrary",
             note="Photos library originals and cache size.",
@@ -402,21 +409,21 @@ def imove_search() -> List[CommandResult]:
     """
     return [
         _run_command(
-            "du -sh /Library/Application\\ Support/GarageBand",
+            "test -d /Library/Application\\ Support/GarageBand && du -sh /Library/Application\\ Support/GarageBand || echo 'No files found.'",
             category="media_assets",
             path="/Library/Application Support/GarageBand",
             note="GarageBand loops and sounds.",
             parse_du=True,
         ),
         _run_command(
-            "du -sh /Library/Application\\ Support/Logic",
+            "test -d /Library/Application\\ Support/Logic && du -sh /Library/Application\\ Support/Logic || echo 'No files found.'",
             category="media_assets",
             path="/Library/Application Support/Logic",
             note="Logic Pro content libraries.",
             parse_du=True,
         ),
         _run_command(
-            "du -sh ~/Movies",
+            "test -d ~/Movies && du -sh ~/Movies || echo 'No files found.'",
             category="media_assets",
             path="~/Movies",
             note="User movie files (including iMovie/Final Cut assets).",
@@ -432,7 +439,7 @@ def purgeable_search() -> List[CommandResult]:
     """
     return [
         _run_command(
-            "diskutil info / | grep -i Purgeable",
+            "diskutil info / 2>/dev/null | grep -i Purgeable || true",
             category="purgeable",
             path="/",
             note="Purgeable storage reported by APFS.",
@@ -447,19 +454,19 @@ def universal_search() -> List[CommandResult]:
     """
     return [
         _run_command(
-            "du -h -d 1 ~ | sort -h",
+            "du -h -d 1 ~ 2>/dev/null | sort -h || echo 'No files found.'",
             category="universal",
             path="~",
             note="Home directory breakdown (sorted ascending).",
         ),
         _run_command(
-            "du -h -d 1 / | sort -h",
+            "du -h -d 1 / 2>/dev/null | sort -h || echo 'No files found.'",
             category="universal",
             path="/",
             note="Top-level disk breakdown; may need elevated privileges for accuracy.",
         ),
         _run_command(
-            "find / -xdev -type f -size +1G -print 2>/dev/null",
+            "find / -xdev -type f -size +1G -print 2>/dev/null || echo 'No files found.'",
             category="universal",
             path="/",
             note="Files over 1GB (root filesystem, errors suppressed).",
