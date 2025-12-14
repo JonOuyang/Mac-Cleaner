@@ -1,7 +1,6 @@
 (() => {
   const ENDPOINT = "/api/scan/stream";
   const startBtn = document.getElementById("start-btn");
-  const mockBtn = document.getElementById("mock-btn");
   const statusText = document.getElementById("status-text");
   const endpointText = document.getElementById("endpoint-text");
   const streamContainer = document.getElementById("stream-container");
@@ -10,6 +9,9 @@
   let activeReader = null;
   let abortController = null;
   let isStreaming = false;
+  const labelDefault = "Start Stream";
+  const labelRunning = "Running...";
+  const labelDone = "Scan Again";
 
   endpointText.textContent = ENDPOINT;
 
@@ -27,7 +29,7 @@
     }
     activeReader = null;
     isStreaming = false;
-    toggleButtons(false);
+    toggleButtons(false, false);
   }
 
   function ensureCard(key, result) {
@@ -133,31 +135,26 @@
       }
       setStatus("Stream ended");
       isStreaming = false;
-      toggleButtons(false);
+      toggleButtons(false, true);
     } catch (err) {
       if (err.name === "AbortError") return;
       console.error(err);
       setStatus("Stream error", "error");
       isStreaming = false;
-      toggleButtons(false);
+      toggleButtons(false, false);
     }
   }
 
-  async function startStreaming(useMock = false) {
+  async function startStreaming() {
     if (isStreaming) return;
     resetStream();
-    setStatus(useMock ? "Using mock stream..." : "Connecting...");
+    setStatus("Connecting...");
     abortController = new AbortController();
     isStreaming = true;
-    toggleButtons(true);
+    toggleButtons(true, false);
 
     try {
-      let response;
-      if (useMock) {
-        response = createMockResponse();
-      } else {
-        response = await fetch(ENDPOINT, { signal: abortController.signal });
-      }
+      const response = await fetch(ENDPOINT, { signal: abortController.signal });
 
       if (!response || !response.body) {
         throw new Error("No response body to stream.");
@@ -169,66 +166,20 @@
       console.error(err);
       setStatus("Failed to connect", "error");
       isStreaming = false;
-      toggleButtons(false);
+      toggleButtons(false, false);
     }
   }
 
-  function createMockResponse() {
-    const encoder = new TextEncoder();
-    const mockResults = [
-      {
-        category: "snapshots",
-        command: "tmutil listlocalsnapshots /",
-        stdout: "com.apple.TimeMachine.2024-02-01-001122",
-        stderr: "",
-        returncode: 0,
-        path: "/",
-        note: "List local APFS snapshots created by Time Machine.",
-      },
-      {
-        category: "caches",
-        command: "du -sh ~/Library/Caches",
-        stdout: "8.0G\t/Users/you/Library/Caches",
-        stderr: "",
-        returncode: 0,
-        path: "~/Library/Caches",
-        note: "User-level caches (Safari, Chrome, apps).",
-      },
-      {
-        category: "developer_data",
-        command: "du -sh ~/Library/Developer/Xcode/DerivedData",
-        stdout: "24G\t/Users/you/Library/Developer/Xcode/DerivedData",
-        stderr: "",
-        returncode: 0,
-        path: "~/Library/Developer/Xcode/DerivedData",
-        note: "Xcode build artifacts (DerivedData).",
-      },
-    ];
+  startBtn?.addEventListener("click", () => startStreaming());
 
-    const stream = new ReadableStream({
-      start(controller) {
-        mockResults.forEach((item, index) => {
-          setTimeout(() => {
-            controller.enqueue(encoder.encode(`${JSON.stringify(item)}\n`));
-          }, index * 400);
-        });
-        setTimeout(() => controller.close(), mockResults.length * 400 + 200);
-      },
-    });
-
-    return new Response(stream, { headers: { "Content-Type": "application/x-ndjson" } });
-  }
-
-  startBtn?.addEventListener("click", () => startStreaming(false));
-  mockBtn?.addEventListener("click", () => startStreaming(true));
-
-  function toggleButtons(disabled) {
+  function toggleButtons(disabled, done) {
     if (startBtn) {
       startBtn.disabled = disabled;
-      startBtn.textContent = disabled ? "Running..." : "Start Stream";
-    }
-    if (mockBtn) {
-      mockBtn.disabled = disabled;
+      if (disabled) {
+        startBtn.textContent = labelRunning;
+      } else {
+        startBtn.textContent = done ? labelDone : labelDefault;
+      }
     }
   }
 })(); 
