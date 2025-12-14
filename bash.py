@@ -116,40 +116,53 @@ def _run_command(
         is returned with stderr describing the timeout.
     """
     try:
-        completed = subprocess.run(
-            command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-        stdout = completed.stdout.strip()
-        stderr = completed.stderr.strip()
-        returncode = completed.returncode
-    except subprocess.TimeoutExpired as exc:
-        stdout = (exc.stdout or "").strip()
-        stderr = (exc.stderr or "").strip() or f"Timed out after {timeout} seconds."
-        returncode = -1
+        try:
+            completed = subprocess.run(
+                command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+            stdout = completed.stdout.strip()
+            stderr = completed.stderr.strip()
+            returncode = completed.returncode
+        except subprocess.TimeoutExpired as exc:
+            stdout = (exc.stdout or "").strip()
+            stderr = (exc.stderr or "").strip() or f"Timed out after {timeout} seconds."
+            returncode = -1
 
-    parsed_sizes = _parse_du_sizes(stdout) if parse_du else []
+        parsed_sizes = _parse_du_sizes(stdout) if parse_du else []
 
-    # Normalize outputs for frontend/CLI consistency.
-    if returncode == 0 and not stdout:
-        stdout = "No files found."
-    if returncode != 0 and not stderr:
-        stderr = "Command failed without additional details."
+        # Normalize outputs for frontend/CLI consistency.
+        if returncode == 0 and not stdout:
+            stdout = "No files found."
+        if returncode != 0 and not stderr:
+            stderr = "Command failed without additional details."
 
-    return {
-        "category": category,
-        "command": command,
-        "stdout": stdout,
-        "stderr": stderr,
-        "returncode": returncode,
-        "path": path,
-        "note": note,
-        "parsed_sizes": parsed_sizes,
-        "status": "ok" if returncode == 0 else "error",
-    }
+        return {
+            "category": category,
+            "command": command,
+            "stdout": stdout,
+            "stderr": stderr,
+            "returncode": returncode,
+            "path": path,
+            "note": note,
+            "parsed_sizes": parsed_sizes,
+            "status": "ok" if returncode == 0 else "error",
+        }
+    except Exception as exc:
+        return {
+            "category": category,
+            "command": command,
+            "stdout": "",
+            "stderr": f"Internal execution error: {exc}",
+            "returncode": -1,
+            "path": path,
+            "note": note,
+            "parsed_sizes": None,
+            "status": "error",
+        }
 
 
 def snapshots_search() -> List[CommandResult]:

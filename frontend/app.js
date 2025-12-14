@@ -3,7 +3,7 @@
   const startBtn = document.getElementById("start-btn");
   const statusText = document.getElementById("status-text");
   const endpointText = document.getElementById("endpoint-text");
-  const progressText = document.getElementById("progress-text");
+  const progressText = null;
   const streamContainer = document.getElementById("stream-container");
   const summaryContainer = document.getElementById("summary-container");
   const header = document.querySelector(".header");
@@ -14,6 +14,9 @@
   let abortController = null;
   let isStreaming = false;
   let failureCount = 0;
+  let durationTimer = null;
+  const startTimes = new Map();
+  const endTimes = new Map();
   const categoryTotals = new Map();
   const categoryCompleted = new Map();
   const labelDefault = "Start Stream";
@@ -75,6 +78,25 @@
     ],
   };
 
+  const categoryOrder = [
+    "snapshots",
+    "apfs",
+    "virtual_memory",
+    "sleep",
+    "caches",
+    "developer_data",
+    "homebrew",
+    "package_artifacts",
+    "docker",
+    "backups",
+    "photos",
+    "media_assets",
+    "purgeable",
+    "universal",
+  ];
+
+  let activeCategoryIndex = 0;
+
   endpointText.textContent = ENDPOINT;
 
   function setStatus(text, tone = "default") {
@@ -91,7 +113,9 @@
     cards.clear();
     summaryCards.clear();
     streamContainer.innerHTML = '<p class="placeholder">Waiting for data...</p>';
-    summaryContainer.innerHTML = '<p class="placeholder">Waiting for data...</p>';
+    if (summaryContainer) {
+      summaryContainer.innerHTML = '<p class="placeholder">Waiting for data...</p>';
+    }
     if (abortController) {
       abortController.abort();
       abortController = null;
@@ -99,6 +123,10 @@
     activeReader = null;
     isStreaming = false;
     failureCount = 0;
+    activeCategoryIndex = 0;
+    startTimes.clear();
+    endTimes.clear();
+    stopDurationTicker();
     categoryTotals.clear();
     categoryCompleted.clear();
     toggleButtons(false, false);
@@ -143,7 +171,10 @@
     const scannedCount = document.createElement("span");
     scannedCount.innerHTML = `<strong>Scanned:</strong> 0`;
     scannedCount.className = "scan-count";
-    meta.append(commandsCount, scannedCount);
+    const timer = document.createElement("span");
+    timer.className = "timer";
+    timer.textContent = "Elapsed: 0s";
+    meta.append(commandsCount, scannedCount, timer);
 
     const output = document.createElement("pre");
     output.className = "output";
@@ -153,12 +184,13 @@
     streamContainer.querySelector(".placeholder")?.remove();
     streamContainer.append(card);
 
-    const entry = { card, status, progressFill, output, note, header: headerEl, category, scannedCount };
+    const entry = { card, status, progressFill, output, note, header: headerEl, category, scannedCount, timer };
     cards.set(key, entry);
     return entry;
   }
 
   function ensureSummary(category) {
+    if (!summaryContainer) return { row: null, counts: { textContent: "" }, badge: { className: "", textContent: "" } };
     if (summaryCards.has(category)) return summaryCards.get(category);
     const row = document.createElement("div");
     row.className = "summary-item";
@@ -169,7 +201,10 @@
     const counts = document.createElement("div");
     counts.className = "counts";
     counts.textContent = `0 / ${expectedCategories[category]?.length || 0}`;
-    left.append(name, counts);
+    const timer = document.createElement("div");
+    timer.className = "timer";
+    timer.textContent = "Elapsed: 0s";
+    left.append(name, counts, timer);
 
     const badge = document.createElement("span");
     badge.className = "badge pending";
@@ -179,44 +214,119 @@
     summaryContainer.querySelector(".placeholder")?.remove();
     summaryContainer.append(row);
 
-    const entry = { row, counts, badge, category };
+    const entry = { row, counts, badge, category, timer };
     summaryCards.set(category, entry);
     return entry;
   }
 
+  function activateCategory(category) {
+    if (!category || startTimes.get(category)) return;
+    
+    // Ensure card exists
+    ensureCard(category);
+    ensureSummary(category);
+
+    startTimes.set(category, Date.now());
+    
+    // Update UI to running state
+    const entry = cards.get(`${category}::category-card`);
+    const summary = summaryCards.get(category);
+    
+    if (entry) {
+      entry.status.classList.remove("pending", "done", "error");
+      entry.status.classList.add("working");
+      entry.status.textContent = "Running";
+    }
+    if (summary) {
+      summary.badge.classList.remove("pending", "done", "error");
+      summary.badge.classList.add("working");
+      summary.badge.textContent = "Running";
+    }
+    refreshDurations();
+  }
+
+  function finishCategory(category, isError = false) {
+    if (!category) return;
+    if (!endTimes.has(category)) endTimes.set(category, Date.now());
+    
+    const entry = cards.get(`${category}::category-card`);
+    const summary = summaryCards.get(category);
+
+    if (entry) {
+        entry.status.classList.remove("pending", "working");
+        entry.status.classList.add(isError ? "error" : "done");
+        entry.status.textContent = isError ? "Error" : "Done";
+    }
+    if (summary) {
+        summary.badge.classList.remove("pending", "working");
+        summary.badge.classList.add(isError ? "error" : "done");
+        summary.badge.textContent = isError ? "Error" : "Done";
+    }
+    refreshDurations();
+  }
+
   function updateCard(result) {
     const category = result.category || "generic";
+    if (!categoryTotals.has(category)) {
+      categoryTotals.set(category, 1);
+      categoryCompleted.set(category, 0);
+    }
+
+    // Check for category transition (if we received a result for a later category)
+    const resultIndex = categoryOrder.indexOf(category);
+    if (resultIndex > -1 && resultIndex > activeCategoryIndex) {
+        // Fast-forward: finish any pending categories between active and this one
+        for (let i = activeCategoryIndex; i < resultIndex; i++) {
+            finishCategory(categoryOrder[i], false); 
+        }
+        activeCategoryIndex = resultIndex;
+        activateCategory(category);
+    } else if (resultIndex === -1 && !startTimes.get(category)) {
+        // Fallback for unknown categories
+        activateCategory(category);
+    }
+
     const entry = ensureCard(category);
     const summary = ensureSummary(category);
 
     entry.note.textContent = result.note || entry.note.textContent;
+
     const combined = [result.command, result.stdout, result.stderr].filter(Boolean).join("\n").trim();
     const existing = entry.output.textContent.replace("Waiting for output...", "").trim();
     entry.output.textContent = `${existing ? existing + "\n\n" : ""}${combined || "(no output)"}`;
     entry.progressFill.classList.remove("indeterminate");
 
     const total = categoryTotals.get(category) || 1;
-    const doneNext = (categoryCompleted.get(category) || 0) + 1;
+    const donePrev = categoryCompleted.get(category) || 0;
+    const doneNext = donePrev + 1;
     entry.progressFill.style.width = `${Math.min(100, (doneNext / total) * 100)}%`;
 
-    entry.status.classList.remove("pending");
-    if (result.status === "ok" || result.returncode === 0) {
-      entry.status.textContent = doneNext >= total ? "Done" : "Working";
-      entry.status.classList.add(doneNext >= total ? "done" : "pending");
-      summary.badge.className = "badge " + (doneNext >= total ? "done" : "pending");
-      summary.badge.textContent = doneNext >= total ? "Done" : "Working";
-    } else {
-      entry.status.textContent = "Error";
-      entry.status.classList.add("error");
-      entry.card.classList.add("error-state");
-      failureCount += 1;
-      summary.badge.className = "badge error";
-      summary.badge.textContent = "Error";
-    }
+    const isError = !(result.status === "ok" || result.returncode === 0);
+    if (isError) failureCount += 1;
 
     categoryCompleted.set(category, doneNext);
     summary.counts.textContent = `${doneNext} / ${total}`;
     entry.scannedCount.innerHTML = `<strong>Scanned:</strong> ${doneNext}`;
+
+    // Completion check
+    if (doneNext >= total) {
+        finishCategory(category, isError);
+        // Automatically start the next one
+        const nextIndex = categoryOrder.indexOf(category) + 1;
+        if (nextIndex < categoryOrder.length) {
+            activeCategoryIndex = nextIndex;
+            activateCategory(categoryOrder[nextIndex]);
+        }
+    } else if (isError) {
+        entry.status.classList.add("error");
+        entry.status.textContent = "Error";
+        summary.badge.classList.add("error");
+    } else {
+        // Still running
+        entry.status.classList.add("working");
+        entry.status.textContent = "Running";
+    }
+    
     updateProgress();
   }
 
@@ -237,7 +347,11 @@
           if (!trimmed) continue;
           try {
             const payload = JSON.parse(trimmed);
-            updateCard(payload);
+            try {
+              updateCard(payload);
+            } catch (err) {
+              console.error("Update error for payload", payload, err);
+            }
           } catch (err) {
             console.warn("Could not parse line", trimmed, err);
           }
@@ -245,23 +359,35 @@
       }
       if (buffer.trim()) {
         try {
-          updateCard(JSON.parse(buffer));
+          const payload = JSON.parse(buffer);
+          try {
+            updateCard(payload);
+          } catch (err) {
+            console.error("Update error for payload", payload, err);
+          }
         } catch {
           console.warn("Trailing data could not be parsed:", buffer);
         }
       }
-      finalizeStatus();
+        finalizeStatus();
     } catch (err) {
       if (err.name === "AbortError") return;
-      console.error(err);
-      setStatus("Stream error", "error");
-      throw err;
+      console.error("Stream error (continuing)", err);
+    } finally {
+      finalizeStatus();
     }
   }
 
   async function startStreaming() {
     if (isStreaming) return;
     resetStream();
+    startDurationTicker();
+    // Activate the first category immediately
+    if (categoryOrder.length > 0) {
+        activeCategoryIndex = 0;
+        activateCategory(categoryOrder[0]);
+    }
+
     setStatus("Connecting...");
     abortController = new AbortController();
     isStreaming = true;
@@ -276,9 +402,9 @@
       if (err.name === "AbortError") return;
       console.error(err);
       setStatus("Failed to connect", "error");
-      throw err;
     } finally {
       isStreaming = false;
+      stopDurationTicker();
       toggleButtons(false, true);
     }
   }
@@ -294,31 +420,66 @@
 
   function seedCards() {
     streamContainer.innerHTML = "";
-    summaryContainer.innerHTML = "";
+    if (summaryContainer) summaryContainer.innerHTML = "";
     Object.keys(expectedCategories).forEach((cat) => {
       categoryTotals.set(cat, expectedCategories[cat].length);
       categoryCompleted.set(cat, 0);
       ensureCard(cat);
       ensureSummary(cat);
     });
+    startTimes.clear();
+    endTimes.clear();
+  }
+
+  function startDurationTicker() {
+    if (durationTimer) return;
+    durationTimer = setInterval(refreshDurations, 500);
+  }
+
+  function stopDurationTicker() {
+    if (durationTimer) {
+      clearInterval(durationTimer);
+      durationTimer = null;
+    }
+  }
+
+  function refreshDurations() {
+    const now = Date.now();
+    cards.forEach((entry, catKey) => {
+      const cat = entry.category;
+      const start = startTimes.get(cat);
+      if (!start) return;
+      const end = endTimes.get(cat);
+      const ms = (end || now) - start;
+      const text = end ? `Finished in ${formatDuration(ms)}` : `Running: ${formatDuration(ms)}`;
+      entry.timer.textContent = text;
+      const summary = summaryCards.get(cat);
+      if (summary && summary.timer) summary.timer.textContent = text;
+    });
+  }
+
+  function formatDuration(ms) {
+    if (ms < 1000) return `${ms}ms`;
+    const seconds = ms / 1000;
+    if (seconds < 60) return `${seconds.toFixed(1)}s`;
+    const mins = Math.floor(seconds / 60);
+    const rem = (seconds % 60).toFixed(0);
+    return `${mins}m ${rem}s`;
   }
 
   function finalizeStatus() {
     const hasFailures = failureCount > 0;
     if (hasFailures) setStatus(`Completed with ${failureCount} error(s)`, "error");
     else setStatus("All categories finished", "success");
+    
+    // Ensure the last active category is marked finished if stream ended
+    const currentCat = categoryOrder[activeCategoryIndex];
+    if (currentCat && !endTimes.has(currentCat)) {
+        finishCategory(currentCat, false);
+    }
   }
 
-  function updateProgress() {
-    if (!progressText) return;
-    const parts = [];
-    Object.keys(expectedCategories).sort().forEach((cat) => {
-      const total = categoryTotals.get(cat) || 0;
-      const done = categoryCompleted.get(cat) || 0;
-      parts.push(`${cat}: ${done}/${total}`);
-    });
-    progressText.textContent = parts.join(" • ");
-  }
+  function updateProgress() {}
 
   // Seed cards initially
   seedCards();
