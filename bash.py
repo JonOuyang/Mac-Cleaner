@@ -6,7 +6,7 @@ import sys
 from typing import Any, Dict, List, Optional
 
 CommandResult = Dict[str, Any]
-DEFAULT_TIMEOUT_SECONDS = 30
+DEFAULT_TIMEOUT_SECONDS = 200
 
 # Ordered list of scan functions for CLI and server streaming.
 SCAN_FUNCTIONS = [
