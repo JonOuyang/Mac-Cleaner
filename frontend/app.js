@@ -5,9 +5,11 @@
   const endpointText = document.getElementById("endpoint-text");
   const progressText = document.getElementById("progress-text");
   const streamContainer = document.getElementById("stream-container");
+  const summaryContainer = document.getElementById("summary-container");
   const header = document.querySelector(".header");
 
   const cards = new Map(); // key: category -> elements
+  const summaryCards = new Map(); // key: category -> elements
   let activeReader = null;
   let abortController = null;
   let isStreaming = false;
@@ -87,7 +89,9 @@
 
   function resetStream() {
     cards.clear();
+    summaryCards.clear();
     streamContainer.innerHTML = '<p class="placeholder">Waiting for data...</p>';
+    summaryContainer.innerHTML = '<p class="placeholder">Waiting for data...</p>';
     if (abortController) {
       abortController.abort();
       abortController = null;
@@ -121,14 +125,15 @@
 
     const status = document.createElement("span");
     status.className = "status pending";
-    status.textContent = "Pending";
+    status.textContent = "Not started";
 
     headerEl.append(titleBox, status);
 
     const progress = document.createElement("div");
     progress.className = "progress";
     const progressFill = document.createElement("div");
-    progressFill.className = "progress-fill indeterminate";
+    progressFill.className = "progress-fill";
+    progressFill.style.width = "0%";
     progress.append(progressFill);
 
     const meta = document.createElement("div");
@@ -153,9 +158,36 @@
     return entry;
   }
 
+  function ensureSummary(category) {
+    if (summaryCards.has(category)) return summaryCards.get(category);
+    const row = document.createElement("div");
+    row.className = "summary-item";
+    const left = document.createElement("div");
+    const name = document.createElement("div");
+    name.className = "name";
+    name.textContent = category;
+    const counts = document.createElement("div");
+    counts.className = "counts";
+    counts.textContent = `0 / ${expectedCategories[category]?.length || 0}`;
+    left.append(name, counts);
+
+    const badge = document.createElement("span");
+    badge.className = "badge pending";
+    badge.textContent = "Not started";
+
+    row.append(left, badge);
+    summaryContainer.querySelector(".placeholder")?.remove();
+    summaryContainer.append(row);
+
+    const entry = { row, counts, badge, category };
+    summaryCards.set(category, entry);
+    return entry;
+  }
+
   function updateCard(result) {
     const category = result.category || "generic";
     const entry = ensureCard(category);
+    const summary = ensureSummary(category);
 
     entry.note.textContent = result.note || entry.note.textContent;
     const combined = [result.command, result.stdout, result.stderr].filter(Boolean).join("\n").trim();
@@ -171,14 +203,19 @@
     if (result.status === "ok" || result.returncode === 0) {
       entry.status.textContent = doneNext >= total ? "Done" : "Working";
       entry.status.classList.add(doneNext >= total ? "done" : "pending");
+      summary.badge.className = "badge " + (doneNext >= total ? "done" : "pending");
+      summary.badge.textContent = doneNext >= total ? "Done" : "Working";
     } else {
       entry.status.textContent = "Error";
       entry.status.classList.add("error");
       entry.card.classList.add("error-state");
       failureCount += 1;
+      summary.badge.className = "badge error";
+      summary.badge.textContent = "Error";
     }
 
     categoryCompleted.set(category, doneNext);
+    summary.counts.textContent = `${doneNext} / ${total}`;
     entry.scannedCount.innerHTML = `<strong>Scanned:</strong> ${doneNext}`;
     updateProgress();
   }
@@ -257,10 +294,12 @@
 
   function seedCards() {
     streamContainer.innerHTML = "";
+    summaryContainer.innerHTML = "";
     Object.keys(expectedCategories).forEach((cat) => {
       categoryTotals.set(cat, expectedCategories[cat].length);
       categoryCompleted.set(cat, 0);
       ensureCard(cat);
+      ensureSummary(cat);
     });
   }
 
